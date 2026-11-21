@@ -1,0 +1,16 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="MIT"
+
+[[mods]]
+modId="punchyknights_devtools"
+version="0.0.0"
+displayName="Punchy x Knights dev tools"
+description='''Screenshots of the first-person arms for development.'''
+
+[[dependencies.punchyknights_devtools]]
+    modId="punchyknights"
+    type="required"
+    versionRange="[0,)"
+    ordering="AFTER"
+    side="CLIENT"
