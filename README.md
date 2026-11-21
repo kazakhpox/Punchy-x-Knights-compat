@@ -8,15 +8,18 @@ armour's vanilla armour-layer texture. Knights & Heraldry's body armour is Stone
 with plates, mail and gauntlets put on it as attachments; it has no vanilla armour-layer texture, so Punchy's arm came out black
 and purple (the missing texture).
 
-**The fix**, through Punchy's own public API (`PunchyApi.hideLayers` and `PunchyApi.drawOnArm`): while StoneyCore under-armour is
-worn on the chest, Punchy's armour layer is left out, and what StoneyCore draws on Minecraft's own first-person arm is drawn on
-Punchy's arm instead, in the pose Punchy gives it: the under-armour sleeve with its texture (dyed when it is dyeable, with its
-overlay), then each attachment's own first-person drawing. When Punchy hands the arm back to Minecraft, StoneyCore draws it
-itself as before.
+**The fix.** Punchy draws the chest armour's arm from the armour's model and its armour-layer textures. For StoneyCore's
+under-armour this mod hands it the model and texture StoneyCore dresses the body in, and draws the sleeve itself where Punchy
+draws armour: StoneyCore keeps its real sleeves in separate parts (`armorRightArm` / `armorLeftArm`) mapped on its own
+128-pixel texture, and its armour materials have no vanilla layers for Punchy to draw. The sleeve is dyed as the under-armour
+is, with its overlay; then every attachment put on it (plate arms, gauntlets...) is drawn with Knights & Heraldry's own
+first-person renderer, posed as Punchy's arm.
 
-| Before (Punchy alone) | With this mod | Holding a sword |
-|---|---|---|
-| ![Before](docs/before.png) | ![After](docs/after.png) | ![With a sword](docs/after_sword.png) |
+| Before (Punchy alone, gambeson with plates) | Gambeson | Gambeson with plate cuirass and gauntlets | Holding a sword |
+|---|---|---|---|
+| ![Before](docs/before.png) | ![Gambeson](docs/after_gambeson.png) | ![Plates](docs/after.png) | ![With a sword](docs/after_sword.png) |
+
+For comparison, the bare arm (the dev skin) is in `docs/bare.png`.
 
 ## Requirements
 

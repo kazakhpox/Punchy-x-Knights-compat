@@ -77,6 +77,8 @@ public final class ShotDriver {
         when("title", () -> Minecraft.getInstance().screen instanceof TitleScreen, this::createWorld);
         when("in world", () -> Minecraft.getInstance().player != null && Minecraft.getInstance().getSingleplayerServer() != null
                 && Minecraft.getInstance().screen == null, () -> wait = 80);
+        then("look bare", 40, () -> server(player -> player.teleportTo(player.serverLevel(), 0.5, -60, 0.5, 0.0F, 10.0F)));
+        then("bare shot", 5, () -> shot("00_bare"));
         then("dress", 40, () -> dress(true));
         then("look", 40, () -> server(player -> player.teleportTo(player.serverLevel(), 0.5, -60, 0.5, 0.0F, 10.0F)));
         then("arms shot", 5, () -> shot("01_arms_plate"));

@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "net.punchyknights.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ArmorModelsMixin",
+    "ChestplateModelAccess"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

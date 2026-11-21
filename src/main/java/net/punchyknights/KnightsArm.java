@@ -1,103 +1,122 @@
 package net.punchyknights;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.model.geom.PartPose;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.HumanoidArm;
-import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.ArmorMaterial;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.component.DyedItemColor;
 
-import banduty.stoneycore.client.model.UnderArmourArmModel;
 import banduty.stoneycore.client.render.armor.ArmorAttachmentRenderManager;
 import banduty.stoneycore.client.render.armor.ArmorAttachmentRenderer;
 import banduty.stoneycore.client.render.armor.ArmorTextureCache;
+import banduty.stoneycore.client.render.armor.UnderArmourRenderer;
 import banduty.stoneycore.items.custom.armor.underarmor.SCDyeableUnderArmor;
 import banduty.stoneycore.items.custom.armor.underarmor.SCUnderArmor;
-import punchy.api.PunchyApi;
 
-/**
- * Draws Knights &amp; Heraldry's armour on Punchy's first-person arm, as StoneyCore draws it on Minecraft's: the chest
- * under-armour's sleeve (its own model and texture, dyed when it is dyeable, with its overlay), then every attachment's own
- * first-person drawing (plate arms, gauntlets...). Punchy has posed the arm it hands over; the sleeve is copied onto it.
- */
-final class KnightsArm {
-    /** StoneyCore moves the sleeve a pixel outwards from the arm (it is a little wider). */
-    private static final float SLEEVE_SHIFT = 1.0F / 16.0F;
-    private static UnderArmourArmModel sleeves;
-
+/** Knights &amp; Heraldry's armour on Punchy's first-person arm, the way StoneyCore dresses the body in it. */
+public final class KnightsArm {
     private KnightsArm() {
     }
 
-    /** Whether the player wears StoneyCore under-armour on the chest: then Punchy's own armour layer has nothing to draw. */
-    static boolean wears(Object player) {
-        return player instanceof AbstractClientPlayer client && client.getItemBySlot(EquipmentSlot.CHEST).getItem() instanceof SCUnderArmor;
+    /** The chest under-armour the player wears, or null. */
+    public static SCUnderArmor worn(AbstractClientPlayer player) {
+        return player.getItemBySlot(EquipmentSlot.CHEST).getItem() instanceof SCUnderArmor armor ? armor : null;
     }
 
-    static void draw(PunchyApi.ArmDraw draw) {
-        if (draw.throughMinecraft() || !(draw.player() instanceof AbstractClientPlayer player)
-                || !(draw.poseStack() instanceof PoseStack pose) || !(draw.sink() instanceof MultiBufferSource buffers)
-                || !(draw.armPart() instanceof ModelPart arm)) {
-            // Through Minecraft's own arm, StoneyCore draws it itself.
+    /** The model StoneyCore dresses the body in for this under-armour: its arms are the sleeves. */
+    public static HumanoidModel<?> model(SCUnderArmor armor) {
+        return UnderArmourRenderer.INSTANCE.getModel(armor);
+    }
+
+    private static ResourceLocation material(ItemStack stack) {
+        if (!(stack.getItem() instanceof SCUnderArmor armor)) {
+            return null;
+        }
+        ResourceKey<ArmorMaterial> key = armor.getMaterial().unwrapKey().orElse(null);
+        return key == null ? null : key.location();
+    }
+
+    /**
+     * The sleeve of StoneyCore's chest model: not its {@code rightArm} (drawn by Punchy, it has no texture of its own) but the
+     * {@code armorRightArm} / {@code armorLeftArm} beside it, mapped on StoneyCore's own 128-pixel layout.
+     */
+    private static ModelPart sleeve(ItemStack stack, boolean left) {
+        if (!(stack.getItem() instanceof SCUnderArmor armor) || !(model(armor) instanceof banduty.stoneycore.client.model.UnderArmourChestplateModel chest)) {
+            return null;
+        }
+        net.punchyknights.mixin.ChestplateModelAccess sleeves = (net.punchyknights.mixin.ChestplateModelAccess) chest;
+        return left ? sleeves.punchyknights$leftSleeve() : sleeves.punchyknights$rightSleeve();
+    }
+
+    /** The texture StoneyCore paints the under-armour with (its base layer). */
+    public static ResourceLocation texture(ItemStack stack) {
+        ResourceLocation id = material(stack);
+        return id == null ? null : ArmorTextureCache.getBaseTexture(id.getNamespace(), id.getPath());
+    }
+
+    /**
+     * Where Punchy draws the armour's sleeve ({@code part}, posed as the arm): the sleeve itself in StoneyCore's texture (dyed, with
+     * its undyed overlay, when it is dyeable), then every
+     * attachment's own first-person drawing. Those pose themselves after the player renderer's own arm: it is posed as the sleeve
+     * while they draw, and put back after.
+     */
+    public static void afterSleeve(ModelPart part, boolean left, ItemStack stack, AbstractClientPlayer player, PoseStack pose,
+            MultiBufferSource buffers, int light) {
+        ResourceLocation id = material(stack);
+        if (id == null) {
             return;
         }
-        boolean left = draw.leftArm();
-        int light = draw.light();
-        ItemStack chest = player.getItemBySlot(EquipmentSlot.CHEST);
-        if (chest.getItem() instanceof SCUnderArmor armor) {
-            sleeve(armor, chest, arm, left, pose, buffers, light);
+        // StoneyCore's under-armour materials have no vanilla armour layers: Punchy, which draws one pass a layer, drew no sleeve.
+        ModelPart sleeve = sleeve(stack, left);
+        boolean dyeable = stack.getItem() instanceof SCDyeableUnderArmor;
+        int colour = dyeable ? net.minecraft.world.item.component.DyedItemColor.getOrDefault(stack,
+                ((SCDyeableUnderArmor) stack.getItem()).getDefaultColor()) : -1;
+        if (sleeve != null) {
+            PartPose before = sleeve.storePose();
+            sleeve.copyFrom(part);
+            sleeve.render(pose, buffers.getBuffer(RenderType.armorCutoutNoCull(ArmorTextureCache.getBaseTexture(id.getNamespace(),
+                    id.getPath()))), light, OverlayTexture.NO_OVERLAY, colour);
+            if (dyeable) {
+                sleeve.render(pose, buffers.getBuffer(RenderType.armorCutoutNoCull(ArmorTextureCache.getOverlayTexture(
+                        id.getNamespace(), id.getPath()))), light, OverlayTexture.NO_OVERLAY, -1);
+            }
+            sleeve.loadPose(before);
         }
-        if (player instanceof LocalPlayer local) {
-            HumanoidArm side = left ? HumanoidArm.LEFT : HumanoidArm.RIGHT;
+        if (!(player instanceof LocalPlayer local)
+                || !(Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(player) instanceof LivingEntityRenderer<?, ?> renderer)
+                || !(renderer.getModel() instanceof HumanoidModel<?> body)) {
+            return;
+        }
+        HumanoidArm side = left ? HumanoidArm.LEFT : HumanoidArm.RIGHT;
+        ModelPart own = left ? body.leftArm : body.rightArm;
+        PartPose saved = own.storePose();
+        own.copyFrom(part);
+        try {
             for (ItemStack worn : player.getArmorSlots()) {
                 if (worn.isEmpty() || !(worn.getItem() instanceof SCUnderArmor)) {
                     continue;
                 }
                 for (ItemStack attachment : SCUnderArmor.getArmorAttachments(worn)) {
-                    ArmorAttachmentRenderer renderer = ArmorAttachmentRenderManager.getRenderer(attachment.getItem());
-                    if (renderer != null) {
-                        renderer.onRenderInFirstPerson(local, attachment, pose, buffers, light, side);
+                    ArmorAttachmentRenderer drawer = ArmorAttachmentRenderManager.getRenderer(attachment.getItem());
+                    if (drawer != null) {
+                        drawer.onRenderInFirstPerson(local, attachment, pose, buffers, light, side);
                     }
                 }
             }
+        } finally {
+            own.loadPose(saved);
         }
-    }
-
-    private static void sleeve(ArmorItem armor, ItemStack chest, ModelPart arm, boolean left, PoseStack pose, MultiBufferSource buffers,
-            int light) {
-        ResourceKey<ArmorMaterial> material = armor.getMaterial().unwrapKey().orElse(null);
-        if (material == null) {
-            return;
-        }
-        ResourceLocation id = material.location();
-        if (sleeves == null) {
-            sleeves = new UnderArmourArmModel(UnderArmourArmModel.getTexturedModelData().bakeRoot());
-        }
-        ModelPart sleeve = left ? sleeves.armorLeftArm : sleeves.armorRightArm;
-        boolean dyeable = chest.getItem() instanceof SCDyeableUnderArmor;
-        int colour = dyeable ? DyedItemColor.getOrDefault(chest, ((SCDyeableUnderArmor) chest.getItem()).getDefaultColor()) : -1;
-        render(sleeve, arm, left, pose, buffers.getBuffer(RenderType.armorCutoutNoCull(ArmorTextureCache.getBaseTexture(id.getNamespace(),
-                id.getPath()))), light, colour);
-        if (dyeable) {
-            render(sleeve, arm, left, pose, buffers.getBuffer(RenderType.armorCutoutNoCull(ArmorTextureCache.getOverlayTexture(
-                    id.getNamespace(), id.getPath()))), light, -1);
-        }
-    }
-
-    private static void render(ModelPart sleeve, ModelPart arm, boolean left, PoseStack pose, VertexConsumer out, int light, int colour) {
-        pose.pushPose();
-        pose.translate(left ? SLEEVE_SHIFT : -SLEEVE_SHIFT, 0.0F, 0.0F);
-        sleeve.copyFrom(arm);
-        sleeve.render(pose, out, light, OverlayTexture.NO_OVERLAY, colour);
-        pose.popPose();
     }
 }
